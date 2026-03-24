@@ -416,7 +416,181 @@ await _auditService.LogAsync(
 
 ---
 
-## 7.8 Security Checklist
+## 7.8 User Profile API Endpoint
+
+Expose a `/api/users/profile` endpoint so authenticated users can view and update their own profile. The endpoint is fully guarded by the JWT middleware registered in Section 7.2.
+
+### UserProfile Model
+
+```csharp
+namespace SysproIntegration.Domain.Models;
+
+public class UserProfile
+{
+    public string UserId   { get; set; } = string.Empty;
+    public string Username { get; set; } = string.Empty;
+    public string Email    { get; set; } = string.Empty;
+    public string FullName { get; set; } = string.Empty;
+    public string[]  Roles { get; set; } = Array.Empty<string>();
+    public DateTime LastLoginUtc { get; set; }
+}
+
+public class UpdateProfileRequest
+{
+    [Required, MaxLength(100)]
+    public string FullName { get; set; } = string.Empty;
+
+    [Required, EmailAddress, MaxLength(200)]
+    public string Email { get; set; } = string.Empty;
+}
+```
+
+### UserProfileController
+
+```csharp
+using System.Security.Claims;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+
+[ApiController]
+[Route("api/users")]
+[Authorize]                        // All endpoints require a valid JWT
+public class UserProfileController : ControllerBase
+{
+    private readonly IUserProfileService _profileService;
+    private readonly IAuditService       _auditService;
+    private readonly ILogger<UserProfileController> _logger;
+
+    public UserProfileController(
+        IUserProfileService profileService,
+        IAuditService auditService,
+        ILogger<UserProfileController> logger)
+    {
+        _profileService = profileService;
+        _auditService   = auditService;
+        _logger         = logger;
+    }
+
+    // ── GET /api/users/profile ────────────────────────────────────────────
+    /// <summary>
+    /// Returns the profile of the currently authenticated user.
+    /// Claims are extracted directly from the JWT — no extra DB round-trip
+    /// is needed for read-only display data.
+    /// </summary>
+    [HttpGet("profile")]
+    public async Task<IActionResult> GetProfile()
+    {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (userId is null)
+            return Unauthorized();
+
+        var profile = await _profileService.GetByIdAsync(userId);
+        if (profile is null)
+            return NotFound(new { message = "Profile not found." });
+
+        _logger.LogInformation("User {UserId} retrieved their profile", userId);
+        return Ok(profile);
+    }
+
+    // ── PUT /api/users/profile ────────────────────────────────────────────
+    /// <summary>
+    /// Updates mutable fields (FullName, Email) for the authenticated user.
+    /// Immutable fields (UserId, Roles) can only be changed by an Admin.
+    /// </summary>
+    [HttpPut("profile")]
+    public async Task<IActionResult> UpdateProfile([FromBody] UpdateProfileRequest request)
+    {
+        if (!ModelState.IsValid)
+            return ValidationProblem(ModelState);
+
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (userId is null)
+            return Unauthorized();
+
+        var existing = await _profileService.GetByIdAsync(userId);
+        if (existing is null)
+            return NotFound(new { message = "Profile not found." });
+
+        var updated = existing with
+        {
+            FullName = request.FullName,
+            Email    = request.Email
+        };
+
+        await _profileService.UpdateAsync(updated);
+
+        await _auditService.LogAsync(
+            entityType : "UserProfile",
+            entityId   : userId,
+            action     : "Update",
+            oldValues  : existing,
+            newValues  : updated,
+            userId     : userId,
+            ipAddress  : HttpContext.Connection.RemoteIpAddress?.ToString());
+
+        _logger.LogInformation("User {UserId} updated their profile", userId);
+        return Ok(updated);
+    }
+}
+```
+
+### IUserProfileService
+
+```csharp
+public interface IUserProfileService
+{
+    Task<UserProfile?> GetByIdAsync(string userId);
+    Task UpdateAsync(UserProfile profile);
+}
+```
+
+### Wiring in Program.cs
+
+```csharp
+// Register the service (swap in your real EF Core / Dapper implementation)
+builder.Services.AddScoped<IUserProfileService, UserProfileService>();
+builder.Services.AddScoped<IAuditService, AuditService>();
+```
+
+### Example Requests
+
+```http
+### Retrieve profile
+GET /api/users/profile HTTP/1.1
+Authorization: Bearer <jwt-token>
+
+### Update profile
+PUT /api/users/profile HTTP/1.1
+Authorization: Bearer <jwt-token>
+Content-Type: application/json
+
+{
+  "fullName": "Alice Smith",
+  "email": "alice.smith@company.com"
+}
+```
+
+### Example Response
+
+```json
+{
+  "userId": "u-001",
+  "username": "admin",
+  "email": "alice.smith@company.com",
+  "fullName": "Alice Smith",
+  "roles": ["Admin", "OrderManager"],
+  "lastLoginUtc": "2024-06-01T09:15:00Z"
+}
+```
+
+> **Security notes**
+> - `UserId` and `Roles` are set server-side only — clients can never self-elevate privileges.
+> - Audit logging (Section 7.7) records every profile change for compliance.
+> - Email uniqueness must be validated in `UserProfileService` before persisting.
+
+---
+
+## 7.9 Security Checklist
 
 | # | Item | Status | Notes |
 |---|------|--------|-------|
@@ -435,6 +609,7 @@ await _auditService.LogAsync(
 | 13 | Error messages don't leak internals | ☐ | Generic messages in production |
 | 14 | Dependency scanning enabled | ☐ | `dotnet list package --vulnerable` |
 | 15 | Secrets rotated quarterly | ☐ | Key Vault auto-rotation |
+| 16 | Profile endpoint enforces `[Authorize]` | ☐ | UserId/Roles never client-supplied |
 
 ---
 

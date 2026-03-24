@@ -149,15 +149,35 @@ public class AuthController : ControllerBase
 
     private (bool valid, string[] roles) ValidateUser(string username, string password)
     {
-        // Production: use ASP.NET Identity, AD, or external IdP
-        // Never hardcode credentials
-        return username switch
+        // Production: validate against your user store (ASP.NET Identity, AD, or external IdP)
+        // NEVER hardcode credentials — this is a simplified demo only
+        // Both username AND password must be verified before granting access
+        var users = new Dictionary<string, (string HashedPassword, string[] Roles)>
         {
-            "admin" => (true, new[] { "Admin", "OrderManager" }),
-            "warehouse" => (true, new[] { "InventoryViewer" }),
-            "sales" => (true, new[] { "OrderCreator", "CustomerViewer" }),
-            _ => (false, Array.Empty<string>())
+            ["admin"]     = (HashPassword("change-me-admin"),     new[] { "Admin", "OrderManager" }),
+            ["warehouse"] = (HashPassword("change-me-warehouse"), new[] { "InventoryViewer" }),
+            ["sales"]     = (HashPassword("change-me-sales"),     new[] { "OrderCreator", "CustomerViewer" }),
         };
+
+        if (!users.TryGetValue(username, out var entry))
+            return (false, Array.Empty<string>());
+
+        // Verify the supplied password against the stored hash
+        var passwordValid = VerifyPassword(password, entry.HashedPassword);
+        return (passwordValid, passwordValid ? entry.Roles : Array.Empty<string>());
+    }
+
+    // Replace with BCrypt, Argon2, or ASP.NET Identity's PasswordHasher<T> in production
+    private static string HashPassword(string plainText)
+        => Convert.ToBase64String(
+               System.Security.Cryptography.SHA256.HashData(
+                   System.Text.Encoding.UTF8.GetBytes(plainText)));
+
+    private static bool VerifyPassword(string plainText, string storedHash)
+    {
+        var a = System.Text.Encoding.UTF8.GetBytes(HashPassword(plainText));
+        var b = System.Text.Encoding.UTF8.GetBytes(storedHash);
+        return System.Security.Cryptography.CryptographicOperations.FixedTimeEquals(a, b);
     }
 }
 

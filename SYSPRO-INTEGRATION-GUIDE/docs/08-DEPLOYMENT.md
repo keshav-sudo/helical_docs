@@ -456,4 +456,407 @@ Step 6: Decommission BLUE
 
 ---
 
+## 8.9 Docker Compose Deployment (Ready-to-Use)
+
+### Complete Docker Compose Setup
+
+This is a production-ready Docker Compose configuration for your SYSPRO integration API.
+
+#### Directory Structure
+
+```
+your-project/
+├── docker-compose.yml
+├── docker-compose.override.yml    # Local development
+├── docker-compose.prod.yml        # Production overrides
+├── .env                           # Environment variables
+├── Dockerfile
+└── src/
+    └── YourApi/
+        └── ...
+```
+
+#### Dockerfile
+
+```dockerfile
+# Dockerfile for .NET SYSPRO Integration API
+
+# Stage 1: Build
+FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+WORKDIR /src
+
+# Copy csproj and restore dependencies
+COPY ["src/YourApi/YourApi.csproj", "YourApi/"]
+RUN dotnet restore "YourApi/YourApi.csproj"
+
+# Copy everything and build
+COPY src/ .
+WORKDIR "/src/YourApi"
+RUN dotnet build "YourApi.csproj" -c Release -o /app/build
+
+# Stage 2: Publish
+FROM build AS publish
+RUN dotnet publish "YourApi.csproj" -c Release -o /app/publish /p:UseAppHost=false
+
+# Stage 3: Runtime
+FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS final
+WORKDIR /app
+
+# Install curl for health checks
+RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
+
+# Copy published app
+COPY --from=publish /app/publish .
+
+# Create non-root user
+RUN adduser --disabled-password --gecos "" appuser
+USER appuser
+
+# Expose port
+EXPOSE 8080
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+  CMD curl -f http://localhost:8080/health || exit 1
+
+ENTRYPOINT ["dotnet", "YourApi.dll"]
+```
+
+#### docker-compose.yml (Base Configuration)
+
+```yaml
+version: '3.8'
+
+services:
+  # ─────────────────────────────────────────────────────────────────
+  # SYSPRO Integration API
+  # ─────────────────────────────────────────────────────────────────
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: syspro-integration-api:${TAG:-latest}
+    container_name: syspro-api
+    restart: unless-stopped
+    
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_URLS=http://+:8080
+      
+      # SYSPRO Connection
+      - Syspro__BaseUrl=${SYSPRO_BASE_URL}
+      - Syspro__DefaultCompany=${SYSPRO_COMPANY}
+      - Syspro__Operator=${SYSPRO_OPERATOR}
+      - Syspro__Password=${SYSPRO_PASSWORD}
+      - Syspro__PoolSize=${SYSPRO_POOL_SIZE:-5}
+      
+      # Database (for your app's data, NOT SYSPRO DB)
+      - ConnectionStrings__AppDb=${APP_DB_CONNECTION}
+      
+      # JWT Settings
+      - Jwt__Secret=${JWT_SECRET}
+      - Jwt__Issuer=${JWT_ISSUER:-SysproApi}
+      - Jwt__Audience=${JWT_AUDIENCE:-SysproClients}
+      
+    ports:
+      - "${API_PORT:-5000}:8080"
+    
+    networks:
+      - syspro-net
+    
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    
+    depends_on:
+      redis:
+        condition: service_healthy
+    
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ─────────────────────────────────────────────────────────────────
+  # Redis - For session caching and distributed locking
+  # ─────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: syspro-redis
+    restart: unless-stopped
+    
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    
+    volumes:
+      - redis-data:/data
+    
+    networks:
+      - syspro-net
+    
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─────────────────────────────────────────────────────────────────
+  # Nginx - Reverse proxy with SSL termination
+  # ─────────────────────────────────────────────────────────────────
+  nginx:
+    image: nginx:alpine
+    container_name: syspro-nginx
+    restart: unless-stopped
+    
+    ports:
+      - "80:80"
+      - "443:443"
+    
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - ./nginx/logs:/var/log/nginx
+    
+    networks:
+      - syspro-net
+    
+    depends_on:
+      api:
+        condition: service_healthy
+
+networks:
+  syspro-net:
+    driver: bridge
+
+volumes:
+  redis-data:
+```
+
+#### docker-compose.override.yml (Development)
+
+```yaml
+# Use for local development: docker-compose up
+version: '3.8'
+
+services:
+  api:
+    build:
+      context: .
+      target: build  # Use build stage for hot reload
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - Syspro__BaseUrl=http://syspro-test-server:30000
+      - Syspro__DefaultCompany=T
+    volumes:
+      - ./src:/src  # Hot reload
+    ports:
+      - "5000:8080"
+      - "5001:8081"  # HTTPS
+  
+  # Skip nginx in development
+  nginx:
+    profiles:
+      - production
+```
+
+#### docker-compose.prod.yml (Production)
+
+```yaml
+# Use for production: docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+version: '3.8'
+
+services:
+  api:
+    deploy:
+      replicas: 3
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+    
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+```
+
+#### .env File Template
+
+```bash
+# .env - Copy to .env and fill in values
+# NEVER commit .env to git!
+
+# ─────────────────────────────────────────
+# SYSPRO Connection
+# ─────────────────────────────────────────
+SYSPRO_BASE_URL=http://syspro-server:30000
+SYSPRO_COMPANY=A
+SYSPRO_OPERATOR=INTEGRATION_USER
+SYSPRO_PASSWORD=secure_password_here
+SYSPRO_POOL_SIZE=10
+
+# ─────────────────────────────────────────
+# API Configuration
+# ─────────────────────────────────────────
+API_PORT=5000
+TAG=v1.0.0
+
+# ─────────────────────────────────────────
+# Database (your app's database)
+# ─────────────────────────────────────────
+APP_DB_CONNECTION=Server=db-server;Database=SysproApiDb;User=sa;Password=dbpass;
+
+# ─────────────────────────────────────────
+# JWT Authentication
+# ─────────────────────────────────────────
+JWT_SECRET=your-256-bit-secret-key-here-min-32-chars
+JWT_ISSUER=SysproApi
+JWT_AUDIENCE=SysproClients
+```
+
+#### Nginx Configuration (nginx/nginx.conf)
+
+```nginx
+events {
+    worker_connections 1024;
+}
+
+http {
+    upstream api_servers {
+        least_conn;
+        server api:8080 weight=1;
+    }
+
+    # Rate limiting
+    limit_req_zone $binary_remote_addr zone=api_limit:10m rate=100r/s;
+
+    server {
+        listen 80;
+        server_name _;
+        
+        # Redirect HTTP to HTTPS
+        return 301 https://$host$request_uri;
+    }
+
+    server {
+        listen 443 ssl http2;
+        server_name _;
+
+        ssl_certificate /etc/nginx/ssl/cert.pem;
+        ssl_certificate_key /etc/nginx/ssl/key.pem;
+        ssl_protocols TLSv1.2 TLSv1.3;
+
+        # API endpoints
+        location /api {
+            limit_req zone=api_limit burst=20 nodelay;
+            
+            proxy_pass http://api_servers;
+            proxy_http_version 1.1;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            
+            # Timeouts (SYSPRO can be slow)
+            proxy_connect_timeout 30s;
+            proxy_read_timeout 120s;
+            proxy_send_timeout 30s;
+        }
+
+        # Health check endpoint (no auth)
+        location /health {
+            proxy_pass http://api_servers;
+            access_log off;
+        }
+    }
+}
+```
+
+### Quick Start Commands
+
+```bash
+# ─────────────────────────────────────────────────────────────────
+# Development
+# ─────────────────────────────────────────────────────────────────
+
+# Start all services
+docker-compose up -d
+
+# View logs
+docker-compose logs -f api
+
+# Rebuild after code changes
+docker-compose up -d --build api
+
+# Stop all
+docker-compose down
+
+# ─────────────────────────────────────────────────────────────────
+# Production
+# ─────────────────────────────────────────────────────────────────
+
+# Start with production overrides
+docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+
+# Scale API to 3 instances
+docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d --scale api=3
+
+# View status
+docker-compose ps
+
+# Check health
+curl http://localhost:5000/health
+
+# Rolling update
+docker-compose -f docker-compose.yml -f docker-compose.prod.yml pull
+docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d --no-deps api
+```
+
+### Health Check Endpoint Code
+
+```csharp
+// Program.cs or Startup.cs
+app.MapGet("/health", async (SysproSessionPool pool) =>
+{
+    try
+    {
+        // Check SYSPRO connectivity
+        var canConnect = await pool.TestConnectionAsync();
+        
+        if (canConnect)
+        {
+            return Results.Ok(new { 
+                status = "healthy",
+                timestamp = DateTime.UtcNow,
+                syspro = "connected"
+            });
+        }
+        
+        return Results.Json(new { 
+            status = "degraded",
+            timestamp = DateTime.UtcNow,
+            syspro = "disconnected"
+        }, statusCode: 503);
+    }
+    catch (Exception ex)
+    {
+        return Results.Json(new { 
+            status = "unhealthy",
+            timestamp = DateTime.UtcNow,
+            error = ex.Message
+        }, statusCode: 503);
+    }
+});
+```
+
+---
+
 [← Back to Main Guide](../README.md) | [Previous: Security](./07-SECURITY-AUTH.md) | [Next: Best Practices →](./09-BEST-PRACTICES.md)

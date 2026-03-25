@@ -39,10 +39,19 @@
 
 | File | Purpose | Read Time |
 |------|---------|-----------|
+| [**🆕 CHEATSHEET.md**](./SYSPRO-INTEGRATION-GUIDE/CHEATSHEET.md) | **One-page reference card** | 5 min |
 | [**QUICK-START.md**](./SYSPRO-INTEGRATION-GUIDE/QUICK-START.md) | Zero to first API call | 2 hours |
 | [**TECH-STACK-GUIDE.md**](./SYSPRO-INTEGRATION-GUIDE/TECH-STACK-GUIDE.md) | Choose your tech stack | 30 min |
 | [**LEARNING-PATH.md**](./SYSPRO-INTEGRATION-GUIDE/LEARNING-PATH.md) | Visual roadmap for freshers | 10 min |
 | [**GLOSSARY.md**](./SYSPRO-INTEGRATION-GUIDE/GLOSSARY.md) | ERP terms & acronyms | Reference |
+
+### 🆕 NEW Documentation (High Clarity)
+
+| File | Purpose | Best For |
+|------|---------|----------|
+| [**11-FAQ.md**](./SYSPRO-INTEGRATION-GUIDE/docs/11-FAQ.md) | 50 most asked questions | Quick answers |
+| [**12-VERSION-COMPATIBILITY.md**](./SYSPRO-INTEGRATION-GUIDE/docs/12-VERSION-COMPATIBILITY.md) | SYSPRO 7 vs 8 differences | Version planning |
+| [**14-SYSPRO-ERROR-CODES.md**](./SYSPRO-INTEGRATION-GUIDE/docs/14-SYSPRO-ERROR-CODES.md) | Complete error reference | Debugging |
 
 ### In-Depth Documentation
 

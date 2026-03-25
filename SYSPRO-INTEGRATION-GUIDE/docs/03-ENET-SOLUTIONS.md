@@ -4,6 +4,67 @@
 
 ---
 
+## 🚀 QUICK LOOKUP TABLE (Copy-Paste Ready)
+
+> **TL;DR** - Most common endpoints and Business Objects at a glance
+
+### e.net Endpoints
+
+| Endpoint | URL Path | Purpose | Returns |
+|----------|----------|---------|---------|
+| **Logon** | `/saborw/Logon` | Start session | `SessionId` GUID |
+| **Logoff** | `/saborw/Logoff` | End session | Success/Error |
+| **Query** | `/saborw/Query` | Read data | XML result |
+| **Transaction** | `/saborw/Transaction` | Create/Update | XML result |
+
+### Common Business Objects
+
+| Business Object | Purpose | Type | XML Root |
+|-----------------|---------|------|----------|
+| `ARSQRY` | Query Customers | Query | `<ArCustomerQuery>` |
+| `ARSTOP` | Create Customer | Transaction | `<ArCustomer>` |
+| `INVQRY` | Query Inventory | Query | `<InvQuery>` |
+| `INVTMM` | Update Stock | Transaction | `<InvMovements>` |
+| `SORTOI` | Create Sales Order | Transaction | `<SalesOrder>` |
+| `SORQRY` | Query Sales Orders | Query | `<SorQuery>` |
+| `PORTOR` | Create Purchase Order | Transaction | `<PurchaseOrder>` |
+| `PORQRY` | Query Purchase Orders | Query | `<PorQuery>` |
+| `WIPTJB` | Create Work Order | Transaction | `<WipJob>` |
+| `WIPQRY` | Query Work Orders | Query | `<WipQuery>` |
+
+### Authentication XML Template
+
+```xml
+<!-- Logon Request -->
+<Logon>
+  <Operator>ADMIN</Operator>
+  <OperatorPassword>password123</OperatorPassword>
+  <CompanyId>A</CompanyId>
+  <CompanyPassword></CompanyPassword>
+</Logon>
+
+<!-- Returns SessionId like: "6B29FC40-CA47-1067-B31D-00DD010662DA" -->
+```
+
+### Quick Code Snippet (.NET)
+
+```csharp
+// 1. Login
+var loginXml = $"<Logon><Operator>{user}</Operator>...</Logon>";
+var sessionId = await client.LogonAsync(loginXml);
+
+// 2. Query
+var result = await client.QueryAsync(sessionId, "INVQRY", queryXml);
+
+// 3. Create Order
+var orderResult = await client.TransactionAsync(sessionId, "SORTOI", orderXml);
+
+// 4. Always Logoff!
+await client.LogoffAsync(sessionId);
+```
+
+---
+
 ## 3.1 What e.net Actually Is — The Complete Picture
 
 e.net Solutions is SYSPRO's **programmatic interface** — the way external code talks to SYSPRO. It predates REST APIs and uses **XML over COM/WCF**. Every button click in the SYSPRO client ultimately goes through the same business logic that e.net exposes.

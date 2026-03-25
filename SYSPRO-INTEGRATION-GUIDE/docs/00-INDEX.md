@@ -17,8 +17,23 @@ docs/
 ├── 07-SECURITY-AUTH.md            ──► Security & JWT authentication
 ├── 08-DEPLOYMENT.md               ──► Production pe deploy karna
 ├── 09-BEST-PRACTICES.md           ──► Industry standards
-└── 10-MASTERY-ROADMAP.md          ──► 30-day learning plan
+├── 10-MASTERY-ROADMAP.md          ──► 30-day learning plan
+├── 11-FAQ.md                      ──► 🆕 50 Common Questions & Answers
+├── 12-VERSION-COMPATIBILITY.md    ──► 🆕 SYSPRO 7 vs 8 Differences
+├── 14-SYSPRO-ERROR-CODES.md       ──► 🆕 Complete Error Reference
+├── QUICK-REFERENCE.md             ──► Quick lookup tables
+├── TROUBLESHOOTING.md             ──► Common problems & fixes
+└── DIAGRAMS.md                    ──► All architecture diagrams
 ```
+
+### 🚀 NEW! Quick Reference Files
+
+| File | Purpose | Best For |
+|------|---------|----------|
+| [../CHEATSHEET.md](../CHEATSHEET.md) | 🆕 One-page reference card | Daily coding |
+| [11-FAQ.md](./11-FAQ.md) | 🆕 50 most asked questions | Quick answers |
+| [14-SYSPRO-ERROR-CODES.md](./14-SYSPRO-ERROR-CODES.md) | 🆕 All error codes & fixes | Debugging |
+| [12-VERSION-COMPATIBILITY.md](./12-VERSION-COMPATIBILITY.md) | 🆕 SYSPRO 7 vs 8 guide | Version planning |
 
 ---
 
@@ -93,9 +108,13 @@ docs/
 | 05-REAL-PROJECT.md | ~450 | 1-1.5 hours | ⭐⭐ Medium |
 | 06-ERROR-HANDLING.md | ~680 | 1.5 hours | ⭐⭐ Medium |
 | 07-SECURITY-AUTH.md | ~440 | 1 hour | ⭐⭐ Medium |
-| 08-DEPLOYMENT.md | ~460 | 1 hour | ⭐⭐ Medium |
+| 08-DEPLOYMENT.md | ~700 | 1.5 hours | ⭐⭐ Medium |
 | 09-BEST-PRACTICES.md | ~460 | 1 hour | ⭐ Easy |
 | 10-MASTERY-ROADMAP.md | ~330 | 30 min | ⭐ Easy |
+| 11-FAQ.md | ~800 | 30 min | ⭐ Easy |
+| 12-VERSION-COMPATIBILITY.md | ~400 | 30 min | ⭐ Easy |
+| 13-MULTI-COMPANY-SETUP.md | ~600 | 1 hour | ⭐⭐ Medium |
+| 14-SYSPRO-ERROR-CODES.md | ~500 | Reference | ⭐ Easy |
 
 ---
 

@@ -1,0 +1,585 @@
+{
+  "info": {
+    "_postman_id": "syspro-enet-collection",
+    "name": "SYSPRO e.net API Collection",
+    "description": "Complete collection for testing SYSPRO e.net Solutions API.\n\n**Setup:**\n1. Set variables in Environment\n2. Run \"Login\" first to get SessionId\n3. SessionId auto-saves to environment\n4. Always run \"Logout\" when done\n\n**Environment Variables Needed:**\n- `baseUrl`: SYSPRO e.net URL (e.g., http://server:30000)\n- `operator`: SYSPRO operator username\n- `password`: Operator password\n- `companyId`: Company code (A, B, T, etc.)\n- `sessionId`: Auto-populated after login",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://syspro-server:30000",
+      "type": "string"
+    },
+    {
+      "key": "operator",
+      "value": "ADMIN",
+      "type": "string"
+    },
+    {
+      "key": "password",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "companyId",
+      "value": "A",
+      "type": "string"
+    },
+    {
+      "key": "sessionId",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Authentication",
+      "description": "Login and logout operations",
+      "item": [
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Parse response",
+                  "var responseText = pm.response.text();",
+                  "",
+                  "// Check for error",
+                  "if (responseText.includes('<ErrorMessage>')) {",
+                  "    var errorMatch = responseText.match(/<ErrorMessage>([^<]+)<\\/ErrorMessage>/);",
+                  "    var error = errorMatch ? errorMatch[1] : 'Unknown error';",
+                  "    pm.test('Login should succeed', function() {",
+                  "        pm.expect.fail('Login failed: ' + error);",
+                  "    });",
+                  "} else {",
+                  "    // Extract SessionId - it's returned as plain text GUID",
+                  "    var sessionId = responseText.trim();",
+                  "    ",
+                  "    // Basic GUID validation",
+                  "    var guidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;",
+                  "    ",
+                  "    if (guidRegex.test(sessionId)) {",
+                  "        // Save to collection variable",
+                  "        pm.collectionVariables.set('sessionId', sessionId);",
+                  "        ",
+                  "        pm.test('Login successful', function() {",
+                  "            pm.response.to.have.status(200);",
+                  "        });",
+                  "        ",
+                  "        console.log('SessionId saved: ' + sessionId);",
+                  "    } else {",
+                  "        pm.test('Valid SessionId received', function() {",
+                  "            pm.expect.fail('Invalid SessionId format: ' + sessionId);",
+                  "        });",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/xml"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "<Logon>\n  <Operator>{{operator}}</Operator>\n  <OperatorPassword>{{password}}</OperatorPassword>\n  <CompanyId>{{companyId}}</CompanyId>\n  <CompanyPassword></CompanyPassword>\n</Logon>"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/saborw/Logon",
+              "host": ["{{baseUrl}}"],
+              "path": ["saborw", "Logon"]
+            },
+            "description": "**Login to SYSPRO e.net**\n\nReturns a SessionId (GUID) that must be used for all subsequent API calls.\n\n**Important:**\n- SessionId is automatically saved to collection variables\n- Session counts against license until logout or 20-minute timeout\n- Always logout when done!"
+          }
+        },
+        {
+          "name": "Logout",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Logout successful', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "// Clear session",
+                  "pm.collectionVariables.set('sessionId', '');",
+                  "console.log('SessionId cleared');"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/xml"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{{sessionId}}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/saborw/Logoff",
+              "host": ["{{baseUrl}}"],
+              "path": ["saborw", "Logoff"]
+            },
+            "description": "**Logout from SYSPRO**\n\nReleases the session and frees the license.\n\n**Always run this when done testing!**"
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Inventory",
+      "description": "Inventory queries and operations",
+      "item": [
+        {
+          "name": "Query Inventory (INVQRY)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/xml"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "<Query>\n  <Key>\n    <StockCode>WIDGET-001</StockCode>\n  </Key>\n  <Option>\n    <IncludeAllWarehouses>Y</IncludeAllWarehouses>\n    <IncludeBins>N</IncludeBins>\n    <IncludeLots>N</IncludeLots>\n    <IncludeSerials>N</IncludeSerials>\n  </Option>\n</Query>"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/saborw/Query?BusinessObject=INVQRY&SessionId={{sessionId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["saborw", "Query"],
+              "query": [
+                { "key": "BusinessObject", "value": "INVQRY" },
+                { "key": "SessionId", "value": "{{sessionId}}" }
+              ]
+            },
+            "description": "**Query inventory for a stock item**\n\nReturns:\n- Quantity on hand\n- Quantity available\n- Quantity allocated\n- Warehouse breakdown"
+          }
+        },
+        {
+          "name": "Query All Stock Codes",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/xml"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "<Query>\n  <Key>\n    <StockCode FilterType=\"A\" FilterValue=\"\"></StockCode>\n  </Key>\n  <Option>\n    <MaxRecords>100</MaxRecords>\n    <IncludeAllWarehouses>N</IncludeAllWarehouses>\n  </Option>\n</Query>"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/saborw/Query?BusinessObject=INVQRY&SessionId={{sessionId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["saborw", "Query"],
+              "query": [
+                { "key": "BusinessObject", "value": "INVQRY" },
+                { "key": "SessionId", "value": "{{sessionId}}" }
+              ]
+            },
+            "description": "Query all inventory items (limited to 100 records)"
+          }
+        },
+        {
+          "name": "Inventory Movement (INVTMM)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/xml"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "<PostInvMovements>\n  <Item>\n    <Journal>IN</Journal>\n    <StockCode>WIDGET-001</StockCode>\n    <Warehouse>01</Warehouse>\n    <Quantity>10</Quantity>\n    <Reference>TEST-RECEIPT</Reference>\n    <Notation>Test inventory receipt</Notation>\n  </Item>\n</PostInvMovements>"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/saborw/Transaction?BusinessObject=INVTMM&SessionId={{sessionId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["saborw", "Transaction"],
+              "query": [
+                { "key": "BusinessObject", "value": "INVTMM" },
+                { "key": "SessionId", "value": "{{sessionId}}" }
+              ]
+            },
+            "description": "**Post inventory movement**\n\nJournal types:\n- IN = Receipt\n- OUT = Issue\n- ADJ = Adjustment\n- TRF = Transfer"
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Customers",
+      "description": "Customer queries and creation",
+      "item": [
+        {
+          "name": "Query Customer (ARSQRY)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/xml"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "<Query>\n  <Key>\n    <Customer>CUST001</Customer>\n  </Key>\n</Query>"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/saborw/Query?BusinessObject=ARSQRY&SessionId={{sessionId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["saborw", "Query"],
+              "query": [
+                { "key": "BusinessObject", "value": "ARSQRY" },
+                { "key": "SessionId", "value": "{{sessionId}}" }
+              ]
+            },
+            "description": "Query customer master data by customer code"
+          }
+        },
+        {
+          "name": "Query Customers by Name",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/xml"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "<Query>\n  <Key>\n    <Customer FilterType=\"A\" FilterValue=\"\"></Customer>\n  </Key>\n  <Option>\n    <FilterByName>ACME</FilterByName>\n    <MaxRecords>50</MaxRecords>\n  </Option>\n</Query>"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/saborw/Query?BusinessObject=ARSQRY&SessionId={{sessionId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["saborw", "Query"],
+              "query": [
+                { "key": "BusinessObject", "value": "ARSQRY" },
+                { "key": "SessionId", "value": "{{sessionId}}" }
+              ]
+            },
+            "description": "Search customers by partial name match"
+          }
+        },
+        {
+          "name": "Create Customer (ARSTOP)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/xml"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "<SetupArCustomer>\n  <Item>\n    <Key>\n      <Customer>NEWCUST01</Customer>\n    </Key>\n    <Name>New Customer Corp</Name>\n    <ShortName>NEW CUST</ShortName>\n    <Branch>01</Branch>\n    <SoldToAddr1>123 Main Street</SoldToAddr1>\n    <SoldToAddr2>Suite 100</SoldToAddr2>\n    <SoldToAddr3>City</SoldToAddr3>\n    <SoldToAddr4>State</SoldToAddr4>\n    <SoldToAddr5>12345</SoldToAddr5>\n    <TaxExemptNum></TaxExemptNum>\n    <CustomerClass>A</CustomerClass>\n    <CreditLimit>50000</CreditLimit>\n    <Currency>USD</Currency>\n    <TermsCode>30</TermsCode>\n    <PriceCode>01</PriceCode>\n    <Telephone>555-1234</Telephone>\n    <Contact>John Smith</Contact>\n    <Email>john@newcustomer.com</Email>\n  </Item>\n</SetupArCustomer>"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/saborw/Transaction?BusinessObject=ARSTOP&SessionId={{sessionId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["saborw", "Transaction"],
+              "query": [
+                { "key": "BusinessObject", "value": "ARSTOP" },
+                { "key": "SessionId", "value": "{{sessionId}}" }
+              ]
+            },
+            "description": "**Create new customer in SYSPRO**\n\nRequired fields:\n- Customer (code)\n- Name\n- Branch\n- CustomerClass\n\nOptional but recommended:\n- Address fields\n- CreditLimit\n- TermsCode\n- PriceCode"
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Sales Orders",
+      "description": "Sales order operations",
+      "item": [
+        {
+          "name": "Query Sales Order (SORQRY)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/xml"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "<Query>\n  <Key>\n    <SalesOrder>SO001234</SalesOrder>\n  </Key>\n  <Option>\n    <IncludeLines>Y</IncludeLines>\n    <IncludeStockDetails>N</IncludeStockDetails>\n  </Option>\n</Query>"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/saborw/Query?BusinessObject=SORQRY&SessionId={{sessionId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["saborw", "Query"],
+              "query": [
+                { "key": "BusinessObject", "value": "SORQRY" },
+                { "key": "SessionId", "value": "{{sessionId}}" }
+              ]
+            },
+            "description": "Query sales order by order number"
+          }
+        },
+        {
+          "name": "Query Orders by Customer",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/xml"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "<Query>\n  <Key>\n    <SalesOrder FilterType=\"A\" FilterValue=\"\"></SalesOrder>\n  </Key>\n  <Option>\n    <FilterByCustomer>CUST001</FilterByCustomer>\n    <FilterByStatus>O</FilterByStatus>\n    <MaxRecords>50</MaxRecords>\n    <IncludeLines>N</IncludeLines>\n  </Option>\n</Query>"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/saborw/Query?BusinessObject=SORQRY&SessionId={{sessionId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["saborw", "Query"],
+              "query": [
+                { "key": "BusinessObject", "value": "SORQRY" },
+                { "key": "SessionId", "value": "{{sessionId}}" }
+              ]
+            },
+            "description": "Query open orders for a specific customer\n\nStatus codes:\n- O = Open\n- C = Completed\n- * = All"
+          }
+        },
+        {
+          "name": "Create Sales Order (SORTOI)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/xml"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "<OrderToBuild>\n  <OrderHeader>\n    <Customer>CUST001</Customer>\n    <CustomerPoNumber>PO-12345</CustomerPoNumber>\n    <OrderDate>2024-01-15</OrderDate>\n    <RequiredDate>2024-01-22</RequiredDate>\n    <Salesperson>SALES01</Salesperson>\n    <Warehouse>01</Warehouse>\n    <ShipAddress1>123 Ship Street</ShipAddress1>\n    <ShipAddress2>Building A</ShipAddress2>\n    <ShipAddress3>City</ShipAddress3>\n    <ShipAddress4>State</ShipAddress4>\n    <ShipAddress5>12345</ShipAddress5>\n    <SpecialInstrs>Handle with care</SpecialInstrs>\n  </OrderHeader>\n  <OrderDetails>\n    <StockLine>\n      <StockCode>WIDGET-001</StockCode>\n      <OrderQty>10</OrderQty>\n      <Price>99.99</Price>\n      <LineActionType>A</LineActionType>\n    </StockLine>\n    <StockLine>\n      <StockCode>WIDGET-002</StockCode>\n      <OrderQty>5</OrderQty>\n      <Price>149.99</Price>\n      <LineActionType>A</LineActionType>\n    </StockLine>\n    <CommentLine>\n      <Comment>Special packaging required</Comment>\n      <LineActionType>A</LineActionType>\n    </CommentLine>\n  </OrderDetails>\n</OrderToBuild>"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/saborw/Transaction?BusinessObject=SORTOI&SessionId={{sessionId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["saborw", "Transaction"],
+              "query": [
+                { "key": "BusinessObject", "value": "SORTOI" },
+                { "key": "SessionId", "value": "{{sessionId}}" }
+              ]
+            },
+            "description": "**Create a new sales order**\n\nLineActionType:\n- A = Add\n- C = Change\n- D = Delete\n\nReturns the created SalesOrder number"
+          }
+        },
+        {
+          "name": "Update Sales Order (SORTOI)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/xml"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "<OrderToBuild>\n  <OrderHeader>\n    <SalesOrder>SO001234</SalesOrder>\n    <SpecialInstrs>Updated instructions</SpecialInstrs>\n  </OrderHeader>\n  <OrderDetails>\n    <StockLine>\n      <SalesOrderLine>1</SalesOrderLine>\n      <OrderQty>15</OrderQty>\n      <LineActionType>C</LineActionType>\n    </StockLine>\n    <StockLine>\n      <StockCode>WIDGET-003</StockCode>\n      <OrderQty>3</OrderQty>\n      <Price>199.99</Price>\n      <LineActionType>A</LineActionType>\n    </StockLine>\n  </OrderDetails>\n</OrderToBuild>"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/saborw/Transaction?BusinessObject=SORTOI&SessionId={{sessionId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["saborw", "Transaction"],
+              "query": [
+                { "key": "BusinessObject", "value": "SORTOI" },
+                { "key": "SessionId", "value": "{{sessionId}}" }
+              ]
+            },
+            "description": "Update existing sales order\n\n- Include SalesOrder number in header\n- C = Change existing line\n- A = Add new line\n- D = Delete line"
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. Purchase Orders",
+      "description": "Purchase order operations",
+      "item": [
+        {
+          "name": "Query Purchase Order (PORQRY)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/xml"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "<Query>\n  <Key>\n    <PurchaseOrder>PO001234</PurchaseOrder>\n  </Key>\n  <Option>\n    <IncludeLines>Y</IncludeLines>\n    <IncludeReceiptHistory>N</IncludeReceiptHistory>\n  </Option>\n</Query>"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/saborw/Query?BusinessObject=PORQRY&SessionId={{sessionId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["saborw", "Query"],
+              "query": [
+                { "key": "BusinessObject", "value": "PORQRY" },
+                { "key": "SessionId", "value": "{{sessionId}}" }
+              ]
+            },
+            "description": "Query purchase order by PO number"
+          }
+        },
+        {
+          "name": "Create Purchase Order (PORTOR)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/xml"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "<PostPurchaseOrder>\n  <OrderHeader>\n    <Supplier>SUPP001</Supplier>\n    <Buyer>BUYER01</Buyer>\n    <OrderDate>2024-01-15</OrderDate>\n    <DueDate>2024-01-30</DueDate>\n    <Warehouse>01</Warehouse>\n    <DeliveryName>Main Warehouse</DeliveryName>\n    <DeliveryAddr1>456 Warehouse Dr</DeliveryAddr1>\n    <DeliveryAddr2>Dock 5</DeliveryAddr2>\n  </OrderHeader>\n  <OrderDetails>\n    <StockLine>\n      <StockCode>RAW-MAT-001</StockCode>\n      <OrderQty>100</OrderQty>\n      <Price>25.00</Price>\n      <LineActionType>A</LineActionType>\n    </StockLine>\n  </OrderDetails>\n</PostPurchaseOrder>"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/saborw/Transaction?BusinessObject=PORTOR&SessionId={{sessionId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["saborw", "Transaction"],
+              "query": [
+                { "key": "BusinessObject", "value": "PORTOR" },
+                { "key": "SessionId", "value": "{{sessionId}}" }
+              ]
+            },
+            "description": "Create a new purchase order"
+          }
+        }
+      ]
+    },
+    {
+      "name": "6. Work Orders (WIP)",
+      "description": "Manufacturing work order operations",
+      "item": [
+        {
+          "name": "Query Work Order (WIPQRY)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/xml"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "<Query>\n  <Key>\n    <Job>WO001234</Job>\n  </Key>\n  <Option>\n    <IncludeOperations>Y</IncludeOperations>\n    <IncludeMaterials>Y</IncludeMaterials>\n    <IncludeLabor>N</IncludeLabor>\n  </Option>\n</Query>"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/saborw/Query?BusinessObject=WIPQRY&SessionId={{sessionId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["saborw", "Query"],
+              "query": [
+                { "key": "BusinessObject", "value": "WIPQRY" },
+                { "key": "SessionId", "value": "{{sessionId}}" }
+              ]
+            },
+            "description": "Query work order / job details"
+          }
+        },
+        {
+          "name": "Create Work Order (WIPTJB)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/xml"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "<PostWipJob>\n  <JobHeader>\n    <StockCode>FIN-PROD-001</StockCode>\n    <Warehouse>01</Warehouse>\n    <QtyToMake>50</QtyToMake>\n    <JobDescription>Production run January</JobDescription>\n    <JobStartDate>2024-01-15</JobStartDate>\n    <JobDueDate>2024-01-20</JobDueDate>\n    <JobClassification>1</JobClassification>\n    <Route>STD</Route>\n  </JobHeader>\n</PostWipJob>"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/saborw/Transaction?BusinessObject=WIPTJB&SessionId={{sessionId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["saborw", "Transaction"],
+              "query": [
+                { "key": "BusinessObject", "value": "WIPTJB" },
+                { "key": "SessionId", "value": "{{sessionId}}" }
+              ]
+            },
+            "description": "Create a new work order / manufacturing job"
+          }
+        }
+      ]
+    },
+    {
+      "name": "7. Health & Diagnostics",
+      "description": "Test connectivity and session status",
+      "item": [
+        {
+          "name": "Test Connection (Ping)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/saborw",
+              "host": ["{{baseUrl}}"],
+              "path": ["saborw"]
+            },
+            "description": "Basic connectivity test - should return service information"
+          }
+        },
+        {
+          "name": "Get Server Info",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/xml"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "<SystemInfo></SystemInfo>"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/saborw/Query?BusinessObject=COMSFM&SessionId={{sessionId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["saborw", "Query"],
+              "query": [
+                { "key": "BusinessObject", "value": "COMSFM" },
+                { "key": "SessionId", "value": "{{sessionId}}" }
+              ]
+            },
+            "description": "Get SYSPRO server information"
+          }
+        }
+      ]
+    }
+  ]
+}

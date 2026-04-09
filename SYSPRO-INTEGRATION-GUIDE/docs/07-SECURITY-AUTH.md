@@ -147,18 +147,46 @@ public class AuthController : ControllerBase
         return Ok(new { token, expiresIn = 3600, roles });
     }
 
+    // Pre-computed PBKDF2 hashes (OWASP-recommended 600_000 iterations, SHA-256, 32-byte output).
+    // Hash and salt are generated together on startup and stored as a matched pair, so
+    // re-derivation with the stored salt will always match the stored hash within the same
+    // process lifetime. In production replace these with BCrypt, Argon2, or ASP.NET Identity's
+    // PasswordHasher<T> backed by a persistent store — NEVER use hardcoded credentials.
+    private static readonly Dictionary<string, (byte[] Hash, byte[] Salt, string[] Roles)> _users =
+        new()
+        {
+            ["admin"]     = (ComputeHash("change-me-admin",     out var s1), s1, new[] { "Admin", "OrderManager" }),
+            ["warehouse"] = (ComputeHash("change-me-warehouse", out var s2), s2, new[] { "InventoryViewer" }),
+            ["sales"]     = (ComputeHash("change-me-sales",     out var s3), s3, new[] { "OrderCreator", "CustomerViewer" }),
+        };
+
     private (bool valid, string[] roles) ValidateUser(string username, string password)
     {
-        // Production: use ASP.NET Identity, AD, or external IdP
-        // Never hardcode credentials
-        return username switch
-        {
-            "admin" => (true, new[] { "Admin", "OrderManager" }),
-            "warehouse" => (true, new[] { "InventoryViewer" }),
-            "sales" => (true, new[] { "OrderCreator", "CustomerViewer" }),
-            _ => (false, Array.Empty<string>())
-        };
+        if (!_users.TryGetValue(username, out var entry))
+            return (false, Array.Empty<string>());
+
+        // Re-derive the key from the supplied password using the stored salt and compare
+        // using constant-time equality to prevent timing attacks.
+        var supplied = DeriveKey(password, entry.Salt);
+        if (!System.Security.Cryptography.CryptographicOperations.FixedTimeEquals(supplied, entry.Hash))
+            return (false, Array.Empty<string>());
+
+        return (true, entry.Roles);
     }
+
+    private static byte[] ComputeHash(string password, out byte[] salt)
+    {
+        salt = System.Security.Cryptography.RandomNumberGenerator.GetBytes(16);
+        return DeriveKey(password, salt);
+    }
+
+    private static byte[] DeriveKey(string password, byte[] salt)
+        => System.Security.Cryptography.Rfc2898DeriveBytes.Pbkdf2(
+               password,
+               salt,
+               iterations: 600_000,   // OWASP 2023 minimum for PBKDF2-HMAC-SHA256
+               hashAlgorithm: System.Security.Cryptography.HashAlgorithmName.SHA256,
+               outputLength: 32);
 }
 
 public class LoginRequest
